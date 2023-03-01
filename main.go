@@ -8,18 +8,14 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 )
 
 var (
-	url   string
 	user  string
 	token string
 )
-
-type commentsJSON struct {
-	Comments []commentJSON
-}
 
 type commentJSON struct {
 	ID   string
@@ -27,10 +23,9 @@ type commentJSON struct {
 }
 
 func usage() {
-	fmt.Println(`Usage: jirae ISSUE_NUMBER [COMMENT_ID]
+	fmt.Println(`Usage: jirae COMMENT_URL
 The following environment variables need to be set:
 - EDITOR
-- JIRA_URL
 - JIRA_USER
 - JIRA_TOKEN`)
 	os.Exit(1)
@@ -40,15 +35,11 @@ func init() {
 	var err error
 	if os.Getenv("EDITOR") == "" {
 		err = fmt.Errorf("EDITOR environment variable is not set")
-	} else if url = strings.TrimRight(os.Getenv("JIRA_URL"), "/"); url == "" {
-		err = fmt.Errorf("JIRA_URL environment variable is not set")
-	} else if !strings.HasPrefix(url, "https://") {
-		err = fmt.Errorf("JIRA_URL does not begin with https://")
 	} else if user = os.Getenv("JIRA_USER"); user == "" {
 		err = fmt.Errorf("JIRA_USER environment variable is not set")
 	} else if token = os.Getenv("JIRA_TOKEN"); token == "" {
 		err = fmt.Errorf("JIRA_TOKEN environment variable is not set")
-	} else if len(os.Args) != 2 && len(os.Args) != 3 {
+	} else if len(os.Args) != 2 {
 		usage()
 	}
 	if err != nil {
@@ -61,16 +52,12 @@ func main() {
 	// TODO: Add option to add new comment.
 	// TODO: Add option to edit description.
 
-	issueID := os.Args[1]
-	var commentID string
-	var commentText string
-	var err error
-	if len(os.Args) == 3 {
-		commentID = os.Args[2]
-		commentText, err = getComment(issueID, commentID)
-	} else {
-		commentID, commentText, err = getLastComment(issueID)
+	commentURL, err := commentURL()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "Invalid comment URL:", err)
+		os.Exit(2)
 	}
+	commentText, err := getComment(commentURL)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "Could not retrieve comment:", err)
 		os.Exit(2)
@@ -80,7 +67,7 @@ func main() {
 		os.Exit(2)
 	}
 	if userConfirmsSubmit() {
-		err = updateCommentText(issueID, commentID, commentText)
+		err = updateCommentText(commentURL, commentText)
 		if err != nil {
 			fmt.Println("The comment was not updated. This new text is discarded:")
 			fmt.Println(commentText)
@@ -93,33 +80,18 @@ func main() {
 	}
 }
 
-func getLastComment(issueID string) (string, string, error) {
-	commentsURL := fmt.Sprintf("%s/rest/api/2/issue/%s/comment", url, issueID)
-	req, err := http.NewRequest("GET", commentsURL, nil)
-	if err != nil {
-		return "", "", err
+func commentURL() (string, error) {
+	re := regexp.MustCompile(
+		`(https://.*\.atlassian\.net)/browse/([^?]+)\?focusedCommentId=([0-9]+)`)
+	p := re.FindStringSubmatch(os.Args[1])
+	if len(p) != 4 {
+		return "", fmt.Errorf("invalid comment URL '%s'", os.Args[1])
 	}
-	req.SetBasicAuth(user, token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return "", "", err
-	}
-	defer resp.Body.Close()
-	var commentsJSON commentsJSON
-	err = json.NewDecoder(resp.Body).Decode(&commentsJSON)
-	if err != nil {
-		return "", "", err
-	}
-	if len(commentsJSON.Comments) == 0 {
-		return "", "", fmt.Errorf("no comments found on the given ticket")
-	}
-	lastComment := commentsJSON.Comments[len(commentsJSON.Comments)-1]
-	return lastComment.ID, lastComment.Body, nil
+	return fmt.Sprintf("%s/rest/api/2/issue/%s/comment/%s", p[1], p[2], p[3]), nil
 }
 
-func getComment(issueID, commentID string) (string, error) {
-	commentsURL := fmt.Sprintf("%s/rest/api/2/issue/%s/comment/%s", url, issueID, commentID)
-	req, err := http.NewRequest("GET", commentsURL, nil)
+func getComment(commentURL string) (string, error) {
+	req, err := http.NewRequest("GET", commentURL, nil)
 	if err != nil {
 		return "", err
 	}
@@ -172,15 +144,14 @@ func userConfirmsSubmit() bool {
 	return input == "y"
 }
 
-func updateCommentText(issueID, commentID, commentText string) error {
+func updateCommentText(commentURL, commentText string) error {
 	update := make(map[string]string)
 	update["body"] = commentText
-	commentsURL := fmt.Sprintf("%s/rest/api/2/issue/%s/comment/%s", url, issueID, commentID)
 	s, err := json.Marshal(update)
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest("PUT", commentsURL, bytes.NewBuffer(s))
+	req, err := http.NewRequest("PUT", commentURL, bytes.NewBuffer(s))
 	if err != nil {
 		return err
 	}

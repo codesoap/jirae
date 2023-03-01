@@ -19,22 +19,25 @@ go install github.com/codesoap/jirae@latest
 ```
 
 # Usage
-Here is an example, assuming you work at "somecorp" and prefer vim as
-your editor:
+Here is an example, assuming you prefer vim as your editor:
 
 ```shell
 # A few environment variables need to be set; put them in your
 # ~/.bashrc, a small wrapper script (e.g. if you want to use a
 # password manager for the token) or similar for ease of use.
 export EDITOR=vim
-export JIRA_URL=https://somecorp.atlassian.net
 export JIRA_USER=your.username@somecorp.com
 # Generate a token at https://id.atlassian.com/manage-profile/security/api-tokens
 export JIRA_TOKEN=<your-REST-API-token>
 
-# Edit the latest comment of the issue with the ID 'SCO-1234':
-jirae SCO-1234
-
-# Edit the comment with the ID '4321' of issue 'SCO-1234':
-jirae SCO-1234 4321
+# Edit a comment (copy this URL by clicking the chain-symbol on the comment):
+jirae 'https://somecorp.atlassian.net/browse/SCO-1234?focusedCommentId=4321'
 ```
+
+# Tips and Tricks
+On most operating systems you can use the `xclip` tool to automatically
+read a copied URL from the clipboard. This way you don't have to paste
+the URL. Add this alias to your `~/.bashrc` (or similar):
+`alias jirae='jirae "$(xclip -o -selection clipboard)"'`. Now you can
+simply call `jirae` (without any argument) after you have copied a URL
+from Jira.
