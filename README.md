@@ -1,7 +1,7 @@
 `jirae` is a small tool, that allows you to edit Jira comments with your
 favorite editor. It has been created, because Atlassian started to force
 its users to use their hideous WYSIWYG editor. It is a workaround for
-[CONFCLOUD-68272](https://jira.atlassian.com/browse/CONFCLOUD-68272).
+[JRACLOUD-72631](https://jira.atlassian.com/browse/JRACLOUD-72631).
 
 Note, that you must use the "old syntax" of Jira, not
 Markdown. E.g. preformatted text is written as `{{text}}`,
