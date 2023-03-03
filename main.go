@@ -18,7 +18,6 @@ var (
 )
 
 type commentJSON struct {
-	ID   string
 	Body string
 }
 
