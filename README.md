@@ -1,6 +1,7 @@
-`jirae` is a small tool, that allows you to edit Jira comments with your
-favorite editor. It has been created, because Atlassian started to force
-its users to use their hideous WYSIWYG editor. It is a workaround for
+`jirae` is a small tool, that allows you to edit Jira comments and issue
+descriptions with your favorite editor. It has been created, because
+Atlassian started to force its users to use their hideous WYSIWYG
+editor. It is a workaround for
 [JRACLOUD-72631](https://jira.atlassian.com/browse/JRACLOUD-72631).
 
 Note, that you must use the "old syntax" of Jira, not
@@ -32,6 +33,9 @@ export JIRA_TOKEN=<your-REST-API-token>
 
 # Edit a comment (copy this URL by clicking the chain-symbol on the comment):
 jirae 'https://somecorp.atlassian.net/browse/SCO-1234?focusedCommentId=4321'
+
+# Edit an issue description (copy this URL by clicking the chain-symbol on the issue):
+jirae 'https://somecorp.atlassian.net/browse/SCO-1234'
 ```
 
 # Tips and Tricks

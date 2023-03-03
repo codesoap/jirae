@@ -21,8 +21,14 @@ type commentJSON struct {
 	Body string
 }
 
+type issueJSON struct {
+	Fields struct {
+		Description string
+	}
+}
+
 func usage() {
-	fmt.Println(`Usage: jirae COMMENT_URL
+	fmt.Println(`Usage: jirae ISSUE_OR_COMMENT_URL
 The following environment variables need to be set:
 - EDITOR
 - JIRA_USER
@@ -49,37 +55,45 @@ func init() {
 
 func main() {
 	// TODO: Add option to add new comment.
-	// TODO: Add option to edit description.
 
-	commentURL, err := commentURL()
+	var text, commentURL, issueURL string
+	var err error
+	if commentURL, err = readCommentURLArgument(); err == nil {
+		text, err = getComment(commentURL)
+	} else {
+		if issueURL, err = readIssueURLArgument(); err != nil {
+			fmt.Fprintln(os.Stderr, "Could not understand given argument:", err)
+			os.Exit(2)
+		}
+		text, err = getIssue(issueURL)
+	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Invalid comment URL:", err)
+		fmt.Fprintln(os.Stderr, "Could not retrieve text:", err)
 		os.Exit(2)
 	}
-	commentText, err := getComment(commentURL)
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "Could not retrieve comment:", err)
-		os.Exit(2)
-	}
-	if commentText, err = getEditedText(commentText); err != nil {
+	if text, err = getEditedText(text); err != nil {
 		fmt.Fprintln(os.Stderr, "Could not get edited text:", err)
 		os.Exit(2)
 	}
 	if userConfirmsSubmit() {
-		err = updateCommentText(commentURL, commentText)
+		if commentURL != "" {
+			err = updateCommentText(commentURL, text)
+		} else {
+			err = updateIssueText(issueURL, text)
+		}
 		if err != nil {
-			fmt.Println("The comment was not updated. This new text is discarded:")
-			fmt.Println(commentText)
-			fmt.Fprintln(os.Stderr, "Could not update comment:", err)
+			fmt.Println("The text was not updated. This new text is discarded:")
+			fmt.Println(text)
+			fmt.Fprintln(os.Stderr, "Could not update text:", err)
 			os.Exit(2)
 		}
 	} else {
-		fmt.Println("The comment was not updated. This new text is discarded:")
-		fmt.Println(commentText)
+		fmt.Println("The text was not updated. This new text is discarded:")
+		fmt.Println(text)
 	}
 }
 
-func commentURL() (string, error) {
+func readCommentURLArgument() (string, error) {
 	re := regexp.MustCompile(
 		`(https://.*\.atlassian\.net)/browse/([^?]+)\?focusedCommentId=([0-9]+)`)
 	p := re.FindStringSubmatch(os.Args[1])
@@ -87,6 +101,16 @@ func commentURL() (string, error) {
 		return "", fmt.Errorf("invalid comment URL '%s'", os.Args[1])
 	}
 	return fmt.Sprintf("%s/rest/api/2/issue/%s/comment/%s", p[1], p[2], p[3]), nil
+}
+
+func readIssueURLArgument() (string, error) {
+	re := regexp.MustCompile(
+		`(https://.*\.atlassian\.net)/browse/([^?/]+)`)
+	p := re.FindStringSubmatch(os.Args[1])
+	if len(p) != 3 {
+		return "", fmt.Errorf("invalid issue URL '%s'", os.Args[1])
+	}
+	return fmt.Sprintf("%s/rest/api/2/issue/%s", p[1], p[2]), nil
 }
 
 func getComment(commentURL string) (string, error) {
@@ -101,11 +125,28 @@ func getComment(commentURL string) (string, error) {
 	}
 	defer resp.Body.Close()
 	var commentJSON commentJSON
-	err = json.NewDecoder(resp.Body).Decode(&commentJSON)
-	if err != nil {
+	if err = json.NewDecoder(resp.Body).Decode(&commentJSON); err != nil {
 		return "", err
 	}
 	return commentJSON.Body, nil
+}
+
+func getIssue(issueURL string) (string, error) {
+	req, err := http.NewRequest("GET", issueURL, nil)
+	if err != nil {
+		return "", err
+	}
+	req.SetBasicAuth(user, token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var issueJSON issueJSON
+	if err = json.NewDecoder(resp.Body).Decode(&issueJSON); err != nil {
+		return "", err
+	}
+	return issueJSON.Fields.Description, nil
 }
 
 func getEditedText(text string) (string, error) {
@@ -137,20 +178,39 @@ func getEditedText(text string) (string, error) {
 }
 
 func userConfirmsSubmit() bool {
-	fmt.Print("Submit updated comment? [y/N]:")
+	fmt.Print("Submit updated text? [y/N]:")
 	var input string
 	fmt.Scanln(&input)
 	return input == "y"
 }
 
-func updateCommentText(commentURL, commentText string) error {
+func updateCommentText(commentURL, text string) error {
 	update := make(map[string]string)
-	update["body"] = commentText
+	update["body"] = text
 	s, err := json.Marshal(update)
 	if err != nil {
 		return err
 	}
 	req, err := http.NewRequest("PUT", commentURL, bytes.NewBuffer(s))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(user, token)
+	req.Header.Set("Content-Type", "application/json")
+	_, err = http.DefaultClient.Do(req)
+	return err
+}
+
+func updateIssueText(issueURL, text string) error {
+	update := make(map[string]any)
+	fields := make(map[string]string)
+	fields["description"] = text
+	update["fields"] = fields
+	s, err := json.Marshal(update)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("PUT", issueURL, bytes.NewBuffer(s))
 	if err != nil {
 		return err
 	}
