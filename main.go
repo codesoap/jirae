@@ -82,9 +82,9 @@ func main() {
 			err = updateIssueText(issueURL, text)
 		}
 		if err != nil {
+			fmt.Fprintln(os.Stderr, "Could not update text:", err)
 			fmt.Println("The text was not updated. This new text is discarded:")
 			fmt.Println(text)
-			fmt.Fprintln(os.Stderr, "Could not update text:", err)
 			os.Exit(2)
 		}
 	} else {
