@@ -17,6 +17,7 @@ var (
 	user  string
 	token string
 	cFlag bool
+	fFlag string
 )
 
 type commentJSON struct {
@@ -33,10 +34,12 @@ func usage() {
 	fmt.Println(`Usage:
 	jirae COMMENT_URL
 	jirae ISSUE_URL
-	jirae -c ISSUE_URL
+	jirae -c [-f] ISSUE_URL
 
 Options:
 	-c  Create a new comment for the issue with the given URL.
+	-f  Additional fields to set in the request. E.g.:
+	    {"visibility": {"type": "role", "value": "Admins"}}
 
 The following environment variables need to be set:
 	EDITOR
@@ -48,6 +51,8 @@ The following environment variables need to be set:
 func init() {
 	flag.Usage = usage
 	flag.BoolVar(&cFlag, "c", false, "Create a new comment.")
+	flag.StringVar(&fFlag, "f", "{}",
+		"JSON containing additional fields when creating comments.")
 	flag.Parse()
 	var err error
 	if os.Getenv("EDITOR") == "" {
@@ -239,7 +244,10 @@ func updateIssueText(issueURL, text string) error {
 }
 
 func createComment(issueURL, text string) error {
-	fields := make(map[string]string)
+	fields := make(map[string]any)
+	if err := json.Unmarshal([]byte(fFlag), &fields); err != nil {
+		return err
+	}
 	fields["body"] = text
 	s, err := json.Marshal(fields)
 	if err != nil {
