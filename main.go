@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"flag"
 	"fmt"
 	"io"
 	"net/http"
@@ -15,6 +16,7 @@ import (
 var (
 	user  string
 	token string
+	cFlag bool
 )
 
 type commentJSON struct {
@@ -28,15 +30,25 @@ type issueJSON struct {
 }
 
 func usage() {
-	fmt.Println(`Usage: jirae ISSUE_OR_COMMENT_URL
+	fmt.Println(`Usage:
+	jirae COMMENT_URL
+	jirae ISSUE_URL
+	jirae -c ISSUE_URL
+
+Options:
+	-c  Create a new comment for the issue with the given URL.
+
 The following environment variables need to be set:
-- EDITOR
-- JIRA_USER
-- JIRA_TOKEN`)
+	EDITOR
+	JIRA_USER
+	JIRA_TOKEN`)
 	os.Exit(1)
 }
 
 func init() {
+	flag.Usage = usage
+	flag.BoolVar(&cFlag, "c", false, "Create a new comment.")
+	flag.Parse()
 	var err error
 	if os.Getenv("EDITOR") == "" {
 		err = fmt.Errorf("EDITOR environment variable is not set")
@@ -44,7 +56,7 @@ func init() {
 		err = fmt.Errorf("JIRA_USER environment variable is not set")
 	} else if token = os.Getenv("JIRA_TOKEN"); token == "" {
 		err = fmt.Errorf("JIRA_TOKEN environment variable is not set")
-	} else if len(os.Args) != 2 {
+	} else if len(flag.Args()) != 1 {
 		usage()
 	}
 	if err != nil {
@@ -54,17 +66,23 @@ func init() {
 }
 
 func main() {
-	// TODO: Add option to add new comment.
+	// API documentation is located at
+	// https://developer.atlassian.com/cloud/jira/platform/rest/v2/intro/
 
 	var text, commentURL, issueURL string
 	var err error
-	if commentURL, err = readCommentURLArgument(); err == nil {
-		text, err = getComment(commentURL)
-	} else {
+	if !cFlag {
+		commentURL, err = readCommentURLArgument()
+	}
+	if cFlag || err != nil {
 		if issueURL, err = readIssueURLArgument(); err != nil {
 			fmt.Fprintln(os.Stderr, "Could not understand given argument:", err)
 			os.Exit(2)
 		}
+	}
+	if commentURL != "" {
+		text, err = getComment(commentURL)
+	} else if !cFlag {
 		text, err = getIssue(issueURL)
 	}
 	if err != nil {
@@ -78,37 +96,39 @@ func main() {
 	if userConfirmsSubmit() {
 		if commentURL != "" {
 			err = updateCommentText(commentURL, text)
-		} else {
+		} else if !cFlag {
 			err = updateIssueText(issueURL, text)
+		} else {
+			err = createComment(issueURL, text)
 		}
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "Could not update text:", err)
-			fmt.Println("The text was not updated. This new text is discarded:")
+			fmt.Fprintln(os.Stderr, "Could not submit text:", err)
+			fmt.Println("The text was not submitted. This new text is discarded:")
 			fmt.Println(text)
 			os.Exit(2)
 		}
 	} else {
-		fmt.Println("The text was not updated. This new text is discarded:")
+		fmt.Println("The text was not submitted. This new text is discarded:")
 		fmt.Println(text)
 	}
 }
 
 func readCommentURLArgument() (string, error) {
 	re := regexp.MustCompile(
-		`(https://.*\.atlassian\.net)/browse/([^?]+)\?focusedCommentId=([0-9]+)`)
-	p := re.FindStringSubmatch(os.Args[1])
+		`^(https://.*\.atlassian\.net)/browse/([^?]+)\?focusedCommentId=([0-9]+)$`)
+	p := re.FindStringSubmatch(flag.Args()[0])
 	if len(p) != 4 {
-		return "", fmt.Errorf("invalid comment URL '%s'", os.Args[1])
+		return "", fmt.Errorf("invalid comment URL '%s'", flag.Args()[0])
 	}
 	return fmt.Sprintf("%s/rest/api/2/issue/%s/comment/%s", p[1], p[2], p[3]), nil
 }
 
 func readIssueURLArgument() (string, error) {
 	re := regexp.MustCompile(
-		`(https://.*\.atlassian\.net)/browse/([^?/]+)`)
-	p := re.FindStringSubmatch(os.Args[1])
+		`^(https://.*\.atlassian\.net)/browse/([^?/]+)$`)
+	p := re.FindStringSubmatch(flag.Args()[0])
 	if len(p) != 3 {
-		return "", fmt.Errorf("invalid issue URL '%s'", os.Args[1])
+		return "", fmt.Errorf("invalid issue URL '%s'", flag.Args()[0])
 	}
 	return fmt.Sprintf("%s/rest/api/2/issue/%s", p[1], p[2]), nil
 }
@@ -211,6 +231,23 @@ func updateIssueText(issueURL, text string) error {
 		return err
 	}
 	req, err := http.NewRequest("PUT", issueURL, bytes.NewBuffer(s))
+	if err != nil {
+		return err
+	}
+	req.SetBasicAuth(user, token)
+	req.Header.Set("Content-Type", "application/json")
+	_, err = http.DefaultClient.Do(req)
+	return err
+}
+
+func createComment(issueURL, text string) error {
+	fields := make(map[string]string)
+	fields["body"] = text
+	s, err := json.Marshal(fields)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest("POST", issueURL+"/comment", bytes.NewBuffer(s))
 	if err != nil {
 		return err
 	}

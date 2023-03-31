@@ -36,12 +36,15 @@ jirae 'https://somecorp.atlassian.net/browse/SCO-1234?focusedCommentId=4321'
 
 # Edit an issue description (copy this URL by clicking the chain-symbol on the issue):
 jirae 'https://somecorp.atlassian.net/browse/SCO-1234'
+
+# Create a new comment (copy this URL by clicking the chain-symbol on the issue):
+jirae -c 'https://somecorp.atlassian.net/browse/SCO-1234'
 ```
 
 # Tips and Tricks
 On most operating systems you can use the `xclip` tool to automatically
 read a copied URL from the clipboard. This way you don't have to paste
 the URL. Add this alias to your `~/.bashrc` (or similar):
-`alias jirae='jirae "$(xclip -o -selection clipboard)"'`. Now you can
-simply call `jirae` (without any argument) after you have copied a URL
-from Jira.
+`jir() {jirae "$@" "$(xclip -o -selection clipboard)"}`. Now you can
+simply call `jir` (without any argument) or `jir -c` after you have
+copied a URL from Jira.
