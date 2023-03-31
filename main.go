@@ -217,8 +217,7 @@ func updateCommentText(commentURL, text string) error {
 	}
 	req.SetBasicAuth(user, token)
 	req.Header.Set("Content-Type", "application/json")
-	_, err = http.DefaultClient.Do(req)
-	return err
+	return doRequestAndCheckResponse(req)
 }
 
 func updateIssueText(issueURL, text string) error {
@@ -236,8 +235,7 @@ func updateIssueText(issueURL, text string) error {
 	}
 	req.SetBasicAuth(user, token)
 	req.Header.Set("Content-Type", "application/json")
-	_, err = http.DefaultClient.Do(req)
-	return err
+	return doRequestAndCheckResponse(req)
 }
 
 func createComment(issueURL, text string) error {
@@ -253,6 +251,24 @@ func createComment(issueURL, text string) error {
 	}
 	req.SetBasicAuth(user, token)
 	req.Header.Set("Content-Type", "application/json")
-	_, err = http.DefaultClient.Do(req)
-	return err
+	return doRequestAndCheckResponse(req)
+}
+
+// doRequestAndCheckResponse executes the given request and returns an
+// error if the request either returned an error or resulted in a non 2xx
+// response code.
+func doRequestAndCheckResponse(req *http.Request) error {
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return fmt.Errorf("Could not read body of unexpected response: %w", err)
+		}
+		return fmt.Errorf("Got non-2xx response %d: %s", resp.StatusCode, body)
+	}
+	return nil
 }
